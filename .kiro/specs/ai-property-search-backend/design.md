@@ -14,14 +14,14 @@ graph TB
     API --> DB[(MongoDB Atlas)]
     API --> AI[FastAPI AI Engine]
     AI --> BERT[Sentence-BERT Model]
-    
+
     subgraph "Node.js Backend"
         API --> Controller[Property Controller]
         Controller --> Service[Property Service]
         Service --> Repository[Property Repository]
         Controller --> AIService[AI Search Service]
     end
-    
+
     subgraph "AI Engine"
         AI --> Intent[Intent Detection]
         Intent --> Embedding[Embedding Generation]
@@ -44,6 +44,7 @@ The system follows a layered architecture pattern:
 ### 1. Node.js REST API Server
 
 **Technology Stack:**
+
 - Runtime: Node.js with Express.js
 - Validation: Joi for input validation
 - Authentication: JWT (future implementation)
@@ -52,6 +53,7 @@ The system follows a layered architecture pattern:
 **Key Components:**
 
 #### Property Controller (`/controllers/propertyController.js`)
+
 ```javascript
 // Handles HTTP requests and responses
 class PropertyController {
@@ -65,6 +67,7 @@ class PropertyController {
 ```
 
 #### Property Service (`/services/propertyService.js`)
+
 ```javascript
 // Business logic and orchestration
 class PropertyService {
@@ -76,6 +79,7 @@ class PropertyService {
 ```
 
 #### AI Search Service (`/services/aiSearchService.js`)
+
 ```javascript
 // Integration with FastAPI AI engine
 class AISearchService {
@@ -88,33 +92,34 @@ class AISearchService {
 ### 2. MongoDB Database Schema
 
 #### Property Schema
+
 ```javascript
 const propertySchema = {
   title: { type: String, required: true, text: true },
   description: { type: String, required: true, text: true },
   price: { type: Number, required: true, min: 0 },
-  propertyType: { 
-    type: String, 
-    enum: ['house', 'condo', 'townhouse', 'land'], 
-    required: true 
+  propertyType: {
+    type: String,
+    enum: ['house', 'condo', 'townhouse', 'land'],
+    required: true,
   },
   area: { type: Number, required: true, min: 0 }, // square meters
   rooms: {
     bedrooms: { type: Number, min: 0 },
-    bathrooms: { type: Number, min: 0 }
+    bathrooms: { type: Number, min: 0 },
   },
   location: {
     type: { type: String, enum: ['Point'], required: true },
     coordinates: { type: [Number], required: true }, // [longitude, latitude]
     address: { type: String, required: true },
     district: String,
-    province: String
+    province: String,
   },
   features: [String], // amenities, nearby facilities
   embedding: [Number], // semantic embedding vector
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-}
+  updatedAt: { type: Date, default: Date.now },
+};
 
 // Indexes
 propertySchema.index({ location: '2dsphere' }); // Geospatial index
@@ -126,6 +131,7 @@ propertySchema.index({ 'location.coordinates': '2dsphere' }); // Geo queries
 ### 3. FastAPI AI Engine
 
 **Technology Stack:**
+
 - Framework: FastAPI with Uvicorn
 - ML Model: Sentence-BERT (all-MiniLM-L6-v2)
 - Libraries: sentence-transformers, numpy, pydantic
@@ -133,11 +139,12 @@ propertySchema.index({ 'location.coordinates': '2dsphere' }); // Geo queries
 **Components:**
 
 #### Intent Detection Service (`/ai_server/services/intent_service.py`)
+
 ```python
 class IntentService:
     def __init__(self):
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
-        
+
     async def process_query(self, query: str) -> IntentResponse:
         # Extract keywords, price ranges, location hints
         # Generate semantic embedding
@@ -145,6 +152,7 @@ class IntentService:
 ```
 
 #### API Endpoints (`/ai_server/main.py`)
+
 ```python
 @app.post("/intent")
 async def detect_intent(request: QueryRequest) -> IntentResponse
@@ -161,6 +169,7 @@ async def calculate_similarity(request: SimilarityRequest) -> SimilarityResponse
 ### API Request/Response Models
 
 #### Search Request
+
 ```javascript
 {
   "query": "บ้านใกล้โรงเรียน งบไม่เกิน 2 ล้าน",
@@ -176,6 +185,7 @@ async def calculate_similarity(request: SimilarityRequest) -> SimilarityResponse
 ```
 
 #### Search Response
+
 ```javascript
 {
   "success": true,
@@ -214,6 +224,7 @@ async def calculate_similarity(request: SimilarityRequest) -> SimilarityResponse
 ### AI Engine Models
 
 #### Intent Response
+
 ```python
 class IntentResponse(BaseModel):
     keywords: List[str]
@@ -227,6 +238,7 @@ class IntentResponse(BaseModel):
 ## Error Handling
 
 ### Error Response Format
+
 ```javascript
 {
   "success": false,
@@ -244,6 +256,7 @@ class IntentResponse(BaseModel):
 ```
 
 ### Error Categories
+
 1. **Validation Errors** (400): Invalid input parameters
 2. **AI Service Errors** (503): FastAPI unavailable or timeout
 3. **Database Errors** (500): MongoDB connection or query issues
@@ -251,6 +264,7 @@ class IntentResponse(BaseModel):
 5. **Not Found** (404): Property or resource not found
 
 ### Fallback Mechanisms
+
 - **AI Service Unavailable**: Fall back to keyword-based text search
 - **Embedding Generation Failed**: Use text search with extracted keywords
 - **Database Timeout**: Return cached results if available
@@ -258,37 +272,42 @@ class IntentResponse(BaseModel):
 ## Testing Strategy
 
 ### Unit Testing
+
 - **Controllers**: Mock services, test request/response handling
 - **Services**: Test business logic with mocked dependencies
 - **Repositories**: Test MongoDB operations with test database
 - **AI Integration**: Mock FastAPI responses, test error handling
 
 ### Integration Testing
+
 - **API Endpoints**: Test complete request flow with test database
 - **AI Engine**: Test actual FastAPI integration with sample queries
 - **Database Operations**: Test with MongoDB test instance
 
 ### Performance Testing
+
 - **Search Performance**: Measure response times under load
 - **AI Processing**: Benchmark embedding generation speed
 - **Database Queries**: Test with large datasets (10k+ properties)
 
 ### Test Data
+
 ```javascript
 // Sample test properties
 const testProperties = [
   {
-    title: "Modern Condo Near BTS",
-    description: "Luxury 2-bedroom condo with city view",
+    title: 'Modern Condo Near BTS',
+    description: 'Luxury 2-bedroom condo with city view',
     price: 3500000,
     location: { coordinates: [100.5412, 13.7563] },
     // ... other fields
-  }
+  },
   // ... more test data
 ];
 ```
 
 ### Testing Tools
+
 - **Unit Tests**: Jest with Supertest for API testing
 - **Mocking**: Sinon.js for service mocking
 - **Database**: MongoDB Memory Server for isolated testing
@@ -297,21 +316,25 @@ const testProperties = [
 ## Performance Considerations
 
 ### Database Optimization
+
 - **Indexing Strategy**: Compound indexes for common query patterns
 - **Aggregation Pipelines**: Efficient data processing for complex searches
 - **Connection Pooling**: Optimize MongoDB connection management
 
 ### AI Engine Optimization
+
 - **Model Caching**: Keep Sentence-BERT model in memory
 - **Batch Processing**: Process multiple embeddings together
 - **Response Caching**: Cache embeddings for common queries
 
 ### API Performance
+
 - **Response Compression**: Gzip compression for large responses
 - **Pagination**: Limit result sets to prevent memory issues
 - **Caching**: Redis for frequently accessed data (future enhancement)
 
 ### Monitoring and Logging
+
 - **Request Logging**: Track API usage and performance metrics
 - **Error Tracking**: Comprehensive error logging with context
 - **Performance Metrics**: Response times, AI processing duration

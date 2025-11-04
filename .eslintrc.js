@@ -1,0 +1,33 @@
+module.exports = {
+  env: {
+    browser: false,
+    commonjs: true,
+    es2021: true,
+    node: true,
+    jest: true,
+  },
+  extends: ['eslint:recommended', 'plugin:node/recommended', 'prettier'],
+  plugins: ['node'],
+  parserOptions: {
+    ecmaVersion: 'latest',
+    sourceType: 'module',
+  },
+  rules: {
+    'no-console': 'warn',
+    'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    'no-var': 'error',
+    'prefer-const': 'error',
+    eqeqeq: ['error', 'always'],
+    curly: ['error', 'all'],
+    'brace-style': ['error', '1tbs'],
+    'comma-dangle': ['error', 'always-multiline'],
+    semi: ['error', 'always'],
+    quotes: ['error', 'single'],
+    indent: ['error', 2],
+    'max-len': ['error', { code: 100, ignoreUrls: true }],
+    'node/no-unpublished-require': 'off',
+    'node/no-missing-import': 'off',
+    'node/no-unsupported-features/es-syntax': 'off',
+  },
+  ignorePatterns: ['node_modules/', 'dist/', 'build/', 'coverage/'],
+};

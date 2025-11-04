@@ -13,7 +13,6 @@
     sudo apt update
     sudo apt install python3 python3-pip -y
 
-
 ติดตั้ง venv สำหรับสร้าง Virtual Environment:
 
      ```bash
@@ -34,7 +33,7 @@
     ถ้าเปิดใช้งานสำเร็จ prompt จะขึ้นว่า (venv) เช่น:
     (venv) omega@omega-01:~/ai_server$
 
-    
+
     ตรวจสอบ venv:
      ```bash
         which python
@@ -43,16 +42,14 @@
         ls ~/ai_server/venv
         # ควรมี bin, lib, pyvenv.cfg
 
-
 3️⃣ ติดตั้งแพ็กเกจ Python
-    ```bash
-    pip install fastapi uvicorn sentence-transformers torch
+```bash
+pip install fastapi uvicorn sentence-transformers torch
 
     ตรวจสอบแพ็กเกจ:
 
     ```bash
     pip list
-
 
 🧹 วิธีแก้ไขปัญหาแพ็กเกจ
 
@@ -62,7 +59,7 @@
 
     2.ลบทุกแพ็กเกจใน venv:
 
-    ```bash 
+    ```bash
     pip freeze > old.txt
     cat old.txt | xargs pip uninstall -y
 
@@ -103,40 +100,37 @@
     # หรือสำหรับ LAN subnet
     sudo ufw allow from 10.134.0.0/16 to any port 8000
 
-
 5️⃣ Flow Diagram (ASCII / Markdown)
 
 +-----------------+
 | ผู้ใช้พิมพ์ข้อความ |
 +-----------------+
-          |
-          v
+|
+v
 +-----------------+
-| ส่งข้อความไป AI  |
-| Intent Engine   |
+| ส่งข้อความไป AI |
+| Intent Engine |
 +-----------------+
-          |
-          v
+|
+v
 +-----------------+
-| AI วิเคราะห์     |
-| - intent        |
-| - keywords      |
-| - embedding     |
+| AI วิเคราะห์ |
+| - intent |
+| - keywords |
+| - embedding |
 +-----------------+
-          |
-          v
+|
+v
 +-----------------+
 | ระบบนำข้อมูลไปใช้ |
-| - filter บ้าน    |
-| - ตอบอัตโนมัติ  |
+| - filter บ้าน |
+| - ตอบอัตโนมัติ |
 +-----------------+
-          |
-          v
+|
+v
 +-----------------+
 | ผู้ใช้เห็นผลลัพธ์ |
 +-----------------+
-
-
 
 6️⃣ หมายเหตุ / เคล็ดลับ
 
@@ -147,6 +141,3 @@
     สำหรับการอัปเดตแพ็กเกจหรือแก้ไข error ให้พิจารณาลบ venv แล้วสร้างใหม่
 
     เปิด port 8000 และกำหนด host 0.0.0.0 เพื่อให้ LAN เข้าถึง API ได้
-
-
-
