@@ -17,7 +17,7 @@
   - Implement graceful shutdown handling
   - _Requirements: 6.1, 6.5_
 
-- [-] 3. Design and implement Property data model
+- [x] 3. Design and implement Property data model
   - Create Property schema with all required fields (title, description, price, location, etc.)
   - Implement geospatial indexing for location-based queries
   - Add text indexing for keyword search capabilities
@@ -25,7 +25,7 @@
   - Implement schema validation with Mongoose validators
   - _Requirements: 2.1, 4.2_
 
-- [ ] 4. Implement basic CRUD operations for properties
+- [x] 4. Implement basic CRUD operations for properties
   - Create Property repository with database operations
   - Implement Property service layer with business logic
   - Build Property controller with request/response handling
@@ -33,13 +33,13 @@
   - Create REST endpoints for Create, Read, Update, Delete operations
   - _Requirements: 4.1, 4.2, 5.2_
 
-- [ ] 4.1 Write unit tests for CRUD operations
+- [x] 4.1 Write unit tests for CRUD operations
   - Create test cases for Property repository methods
   - Test Property service business logic
   - Test API endpoints with various input scenarios
   - _Requirements: 4.1, 4.2_
 
-- [ ] 5. Implement keyword and geospatial search functionality
+- [x] 5. Implement keyword and geospatial search functionality
   - Create search service with text search using MongoDB text indexes
   - Implement geospatial search with distance calculations
   - Add search filters for price range, property type, and area
@@ -47,13 +47,13 @@
   - Create search endpoint with query parameter handling
   - _Requirements: 2.2, 2.3, 2.5, 3.3_
 
-- [ ] 5.1 Write integration tests for search functionality
+- [x] 5.1 Write integration tests for search functionality
   - Test text search with various keywords
   - Test geospatial search with different locations and radii
   - Test combined search filters and pagination
   - _Requirements: 2.2, 2.3, 2.5_
 
-- [ ] 6. Set up FastAPI AI engine project
+- [x] 6. Set up FastAPI AI engine project
   - Create separate Python project for AI services
   - Install FastAPI, uvicorn, and sentence-transformers dependencies
   - Set up project structure for AI services
@@ -61,7 +61,7 @@
   - Create basic FastAPI application with health endpoint
   - _Requirements: 1.1, 1.4_
 
-- [ ] 7. Implement intent detection and embedding generation
+- [-] 7. Implement intent detection and embedding generation
   - Create intent detection service using Sentence-BERT
   - Implement natural language query processing
   - Build keyword extraction from user queries

@@ -13,20 +13,20 @@ describe('Property Model', () => {
       area: 85,
       rooms: {
         bedrooms: 2,
-        bathrooms: 2
+        bathrooms: 2,
       },
       location: {
         type: 'Point',
         coordinates: [100.5412, 13.7563], // [longitude, latitude] - Bangkok
         address: '123 Sukhumvit Road, Watthana, Bangkok 10110',
         district: 'Watthana',
-        province: 'Bangkok'
+        province: 'Bangkok',
       },
       features: ['Swimming Pool', 'Gym', 'Security', 'Parking'],
       contact: {
         name: 'John Doe',
         phone: '0812345678',
-        email: 'john@example.com'
+        email: 'john@example.com',
       }
     };
 
@@ -71,7 +71,7 @@ describe('Property Model', () => {
         ...validPropertyData,
         location: {
           ...validPropertyData.location,
-          coordinates: [200, 100] // Invalid longitude
+          coordinates: [200, 100], // Invalid longitude
         }
       };
 
@@ -94,7 +94,7 @@ describe('Property Model', () => {
         ...validPropertyData,
         contact: {
           ...validPropertyData.contact,
-          phone: 'invalid-phone'
+          phone: 'invalid-phone',
         }
       };
 
@@ -109,7 +109,7 @@ describe('Property Model', () => {
         ...validPropertyData,
         contact: {
           ...validPropertyData.contact,
-          email: 'invalid-email'
+          email: 'invalid-email',
         }
       };
 
@@ -131,7 +131,7 @@ describe('Property Model', () => {
         location: {
           type: 'Point',
           coordinates: [100.5412, 13.7563],
-          address: '123 Test Street, Bangkok'
+          address: '123 Test Street, Bangkok',
         }
       });
 
@@ -148,7 +148,7 @@ describe('Property Model', () => {
         location: {
           type: 'Point',
           coordinates: [100.5412, 13.7563],
-          address: '123 Test Street, Bangkok'
+          address: '123 Test Street, Bangkok',
         }
       });
 
@@ -167,7 +167,7 @@ describe('Property Model', () => {
         location: {
           type: 'Point',
           coordinates: [100.5412, 13.7563], // Bangkok coordinates
-          address: '123 Test Street, Bangkok'
+          address: '123 Test Street, Bangkok',
         }
       });
 
@@ -211,13 +211,13 @@ describe('Property Model', () => {
       
       // Check for geospatial index
       const geoIndex = indexes.find(index => 
-        index[0] && index[0].location === '2dsphere'
+        index[0] && index[0].location === '2dsphere',
       );
       expect(geoIndex).toBeDefined();
       
       // Check for text index
       const textIndex = indexes.find(index => 
-        index[0] && (index[0].title === 'text' || index[0]['$**'] === 'text')
+        index[0] && (index[0].title === 'text' || index[0]['$**'] === 'text'),
       );
       expect(textIndex).toBeDefined();
     });

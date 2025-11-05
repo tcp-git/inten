@@ -20,6 +20,12 @@ app.use(express.urlencoded({ extended: true }));
 
 const healthService = require('./services/healthService');
 
+// Import routes
+const propertyRoutes = require('./routes/propertyRoutes');
+
+// API routes
+app.use('/api/properties', propertyRoutes);
+
 // Health check endpoints
 app.get('/health', async (req, res) => {
   try {
