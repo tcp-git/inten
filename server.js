@@ -57,17 +57,59 @@ const healthRoutes = require('./routes/healthRoutes');
 // API Documentation
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(specs, {
   explorer: true,
-  customCss: '.swagger-ui .topbar { display: none }',
+  customCss: `
+    .swagger-ui .topbar { display: none }
+    .swagger-ui .info { margin: 50px 0; }
+    .swagger-ui .info .title { color: #3b4151; }
+    .swagger-ui .scheme-container { background: #f7f7f7; padding: 15px; border-radius: 4px; }
+    .swagger-ui .btn.authorize { background-color: #49cc90; border-color: #49cc90; }
+    .swagger-ui .btn.authorize:hover { background-color: #41b883; border-color: #41b883; }
+    .swagger-ui .highlight-code { background: #f8f8f8; }
+    .swagger-ui .model-box { background: #f8f8f8; }
+    .swagger-ui .response-col_status { font-weight: bold; }
+    .swagger-ui .opblock.opblock-post { border-color: #49cc90; }
+    .swagger-ui .opblock.opblock-post .opblock-summary { border-color: #49cc90; }
+    .swagger-ui .opblock.opblock-get { border-color: #61affe; }
+    .swagger-ui .opblock.opblock-get .opblock-summary { border-color: #61affe; }
+    .swagger-ui .opblock.opblock-put { border-color: #fca130; }
+    .swagger-ui .opblock.opblock-put .opblock-summary { border-color: #fca130; }
+    .swagger-ui .opblock.opblock-delete { border-color: #f93e3e; }
+    .swagger-ui .opblock.opblock-delete .opblock-summary { border-color: #f93e3e; }
+  `,
   customSiteTitle: 'AI Property Search API Documentation',
+  customfavIcon: '/favicon.ico',
   swaggerOptions: {
-    docExpansion: 'none',
+    docExpansion: 'list',
     filter: true,
     showRequestDuration: true,
+    showExtensions: true,
+    showCommonExtensions: true,
     tryItOutEnabled: true,
     requestInterceptor: (req) => {
       req.headers['X-Requested-With'] = 'SwaggerUI';
+      req.headers['X-API-Documentation'] = 'true';
       return req;
-    }
+    },
+    responseInterceptor: (res) => {
+      // Log API calls made through Swagger UI for debugging
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Swagger UI API Call:', {
+          url: res.url,
+          status: res.status,
+          duration: res.headers['x-response-time'] || 'N/A'
+        });
+      }
+      return res;
+    },
+    defaultModelsExpandDepth: 2,
+    defaultModelExpandDepth: 3,
+    displayOperationId: false,
+    displayRequestDuration: true,
+    maxDisplayedTags: 10,
+    showMutatedRequest: true,
+    supportedSubmitMethods: ['get', 'post', 'put', 'delete', 'patch'],
+    validatorUrl: null, // Disable online validator
+    oauth2RedirectUrl: `${process.env.API_BASE_URL || 'http://localhost:3000'}/api/docs/oauth2-redirect.html`,
   }
 }));
 

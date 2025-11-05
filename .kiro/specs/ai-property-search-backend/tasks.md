@@ -120,7 +120,7 @@
   - Implement request ID tracking for debugging
   - _Requirements: 5.3, 6.4_
 
-- [-] 13. Add API documentation with Swagger
+- [ ] 13. Add API documentation with Swagger
   - Install and configure Swagger/OpenAPI 3.0
   - Document all API endpoints with request/response schemas
   - Add example requests and responses

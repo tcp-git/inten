@@ -24,7 +24,8 @@
  *           type: string
  *           minLength: 20
  *           maxLength: 2000
- *           example: "Beautiful modern house with 3 bedrooms, 2.5 bathrooms, located near BTS station"
+ *           example: |
+ *             "Beautiful modern house with 3 bedrooms, 2.5 bathrooms, located near BTS station"
  *         price:
  *           type: integer
  *           minimum: 0
@@ -411,7 +412,8 @@
  *                       distance:
  *                         type: number
  *                         example: 2.5
- *                         description: "Distance from search center in kilometers"
+ *                         description: |
+ *                           "Distance from search center in kilometers"
  *             pagination:
  *               $ref: '#/components/schemas/PaginationResponse'
  *             searchMeta:
@@ -431,7 +433,8 @@
  *                 fallbackUsed:
  *                   type: boolean
  *                   example: false
- *                   description: "Whether fallback search was used due to AI service unavailability"
+ *                   description: |
+ *                     "Whether fallback search was used due to AI service unavailability"
  * 
  *     PaginationResponse:
  *       type: object
@@ -641,60 +644,120 @@
  * 
  *     ErrorResponse:
  *       type: object
+ *       required:
+ *         - success
+ *         - error
  *       properties:
  *         success:
  *           type: boolean
  *           example: false
+ *           description: "Always false for error responses"
  *         error:
  *           type: object
+ *           required:
+ *             - code
+ *             - message
  *           properties:
  *             code:
  *               type: string
+ *               enum: 
+ *                 - VALIDATION_ERROR
+ *                 - PROPERTY_NOT_FOUND
+ *                 - DATABASE_ERROR
+ *                 - AI_SERVICE_UNAVAILABLE
+ *                 - RATE_LIMIT_EXCEEDED
+ *                 - INTERNAL_SERVER_ERROR
+ *                 - INVALID_PROPERTY_ID
+ *                 - EMBEDDING_GENERATION_FAILED
+ *                 - SEARCH_TIMEOUT
+ *                 - INSUFFICIENT_DATA
  *               example: "VALIDATION_ERROR"
+ *               description: "Specific error code for programmatic handling"
  *             message:
  *               type: string
  *               example: "Invalid input data"
+ *               description: "Human-readable error message"
+ *             details:
+ *               type: object
+ *               description: "Additional error details (optional)"
+ *               additionalProperties: true
  *             timestamp:
  *               type: string
  *               format: date-time
  *               example: "2024-01-15T10:30:00.000Z"
+ *               description: "ISO 8601 timestamp when error occurred"
  *             requestId:
  *               type: string
  *               example: "req_123456789"
+ *               description: "Unique request identifier for debugging"
+ *             path:
+ *               type: string
+ *               example: "/api/properties/search"
+ *               description: "API endpoint where error occurred"
+ *             method:
+ *               type: string
+ *               example: "POST"
+ *               description: "HTTP method used"
  * 
  *     ValidationErrorResponse:
  *       type: object
+ *       required:
+ *         - success
+ *         - error
  *       properties:
  *         success:
  *           type: boolean
  *           example: false
+ *           description: "Always false for validation errors"
  *         error:
  *           type: object
+ *           required:
+ *             - code
+ *             - message
+ *             - details
  *           properties:
  *             code:
  *               type: string
+ *               enum: [VALIDATION_ERROR]
  *               example: "VALIDATION_ERROR"
+ *               description: "Error code indicating validation failure"
  *             message:
  *               type: string
  *               example: "Invalid input data"
+ *               description: "General validation error message"
  *             details:
  *               type: array
+ *               description: "Array of specific field validation errors"
  *               items:
  *                 type: object
+ *                 required:
+ *                   - field
+ *                   - message
  *                 properties:
  *                   field:
  *                     type: string
  *                     example: "price"
+ *                     description: "Name of the field that failed validation"
  *                   message:
  *                     type: string
  *                     example: "Price must be a positive number"
+ *                     description: "Specific validation error message"
  *                   value:
+ *                     description: "The invalid value that was provided"
  *                     example: -1000
+ *                   constraint:
+ *                     type: string
+ *                     example: "min:0"
+ *                     description: "The validation constraint that was violated"
  *             timestamp:
  *               type: string
  *               format: date-time
+ *               example: "2024-01-15T10:30:00.000Z"
+ *               description: "ISO 8601 timestamp when validation failed"
  *             requestId:
  *               type: string
+ *               example: "req_123456789"
+ *               description: "Unique request identifier for debugging"
  * 
  *     SuccessResponse:
  *       type: object
