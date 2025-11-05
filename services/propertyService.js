@@ -1,5 +1,14 @@
 const PropertyRepository = require('../repositories/propertyRepository');
 const SearchService = require('./searchService');
+const SemanticSearchService = require('./semanticSearchService');
+const EmbeddingService = require('./embeddingService');
+const { 
+  NotFoundError, 
+  ValidationError, 
+  DatabaseError,
+  AIServiceError 
+} = require('../middleware/errors');
+const logger = require('../middleware/logger');
 
 /**
  * Property Service - Business logic layer for Property operations
@@ -9,6 +18,8 @@ class PropertyService {
   constructor() {
     this.propertyRepository = new PropertyRepository();
     this.searchService = new SearchService();
+    this.semanticSearchService = new SemanticSearchService();
+    this.embeddingService = new EmbeddingService();
   }
 
   /**
@@ -26,6 +37,9 @@ class PropertyService {
 
       // Create property through repository
       const property = await this.propertyRepository.create(normalizedData);
+
+      // Generate embedding for semantic search (async, don't wait)
+      this._generateEmbeddingAsync(property._id.toString());
 
       return this._formatPropertyResponse(property);
     } catch (error) {
@@ -170,6 +184,9 @@ class PropertyService {
 
       const updatedProperty = await this.propertyRepository.updateById(id, normalizedData);
 
+      // Update embedding if content changed (async, don't wait)
+      this._updateEmbeddingAsync(id, filteredUpdateData);
+
       return this._formatPropertyResponse(updatedProperty);
     } catch (error) {
       throw this._handleServiceError(error, 'Failed to update property');
@@ -215,10 +232,41 @@ class PropertyService {
       // Validate search parameters
       this._validateSearchParams(searchParams);
 
-      // Delegate to search service
-      return await this.searchService.searchProperties(searchParams);
+      // Use semantic search if enabled, otherwise fallback to regular search
+      const useSemanticSearch = searchParams.useSemanticSearch !== false; // Default to true
+      
+      if (useSemanticSearch) {
+        return await this.semanticSearchService.searchWithSemanticRanking(searchParams);
+      } else {
+        return await this.searchService.searchProperties(searchParams);
+      }
     } catch (error) {
       throw this._handleServiceError(error, 'Property search failed');
+    }
+  }
+
+  /**
+   * Find properties similar to a given property
+   * @param {string} propertyId - Property ID to find similar properties for
+   * @param {Object} options - Search options
+   * @returns {Promise<Object>} Similar properties
+   */
+  async findSimilarProperties(propertyId, options = {}) {
+    try {
+      if (!propertyId) {
+        throw new Error('Property ID is required');
+      }
+
+      // Use semantic similarity search by default
+      const useSemanticSearch = options.useSemanticSearch !== false; // Default to true
+      
+      if (useSemanticSearch) {
+        return await this.semanticSearchService.findSimilarPropertiesWithSemantics(propertyId, options);
+      } else {
+        return await this.searchService.findSimilarProperties(propertyId, options);
+      }
+    } catch (error) {
+      throw this._handleServiceError(error, 'Similar properties search failed');
     }
   }
 
@@ -232,12 +280,14 @@ class PropertyService {
         totalProperties,
         availableProperties,
         soldProperties,
-        rentedProperties
+        rentedProperties,
+        embeddingStats
       ] = await Promise.all([
         this.propertyRepository.count(),
         this.propertyRepository.count({ status: 'available' }),
         this.propertyRepository.count({ status: 'sold' }),
-        this.propertyRepository.count({ status: 'rented' })
+        this.propertyRepository.count({ status: 'rented' }),
+        this.embeddingService.getEmbeddingStats()
       ]);
 
       return {
@@ -245,10 +295,91 @@ class PropertyService {
         available: availableProperties,
         sold: soldProperties,
         rented: rentedProperties,
-        pending: totalProperties - availableProperties - soldProperties - rentedProperties
+        pending: totalProperties - availableProperties - soldProperties - rentedProperties,
+        embeddings: embeddingStats
       };
     } catch (error) {
       throw this._handleServiceError(error, 'Failed to get property statistics');
+    }
+  }
+
+  /**
+   * Generate embeddings for properties that don't have them
+   * @param {Object} options - Generation options
+   * @returns {Promise<Object>} Generation results
+   */
+  async generateMissingEmbeddings(options = {}) {
+    try {
+      // Find properties without embeddings
+      const propertyIds = await this.embeddingService.findPropertiesWithoutEmbeddings(options);
+      
+      if (propertyIds.length === 0) {
+        return {
+          message: 'All properties already have embeddings',
+          processed: 0
+        };
+      }
+
+      // Generate embeddings in batch
+      const results = await this.embeddingService.generateBatchEmbeddings(propertyIds, options);
+
+      return {
+        message: 'Embedding generation completed',
+        ...results
+      };
+    } catch (error) {
+      throw this._handleServiceError(error, 'Failed to generate missing embeddings');
+    }
+  }
+
+  /**
+   * Calculate semantic similarity between properties
+   * @param {string} propertyId1 - First property ID
+   * @param {string} propertyId2 - Second property ID
+   * @returns {Promise<Object>} Similarity result
+   */
+  async calculatePropertySimilarity(propertyId1, propertyId2) {
+    try {
+      if (!propertyId1 || !propertyId2) {
+        throw new Error('Both property IDs are required');
+      }
+
+      // Get both properties
+      const [property1, property2] = await Promise.all([
+        this.propertyRepository.findById(propertyId1),
+        this.propertyRepository.findById(propertyId2)
+      ]);
+
+      if (!property1 || !property2) {
+        throw new Error('One or both properties not found');
+      }
+
+      // Check if both have embeddings
+      if (!property1.embedding || property1.embedding.length === 0 ||
+          !property2.embedding || property2.embedding.length === 0) {
+        throw new Error('Both properties must have embeddings for similarity calculation');
+      }
+
+      // Calculate similarity
+      const similarity = this.embeddingService.calculateCosineSimilarity(
+        property1.embedding,
+        property2.embedding
+      );
+
+      return {
+        property1: {
+          id: property1._id,
+          title: property1.title
+        },
+        property2: {
+          id: property2._id,
+          title: property2.title
+        },
+        semanticSimilarity: Math.round(similarity * 100) / 100,
+        similarityPercentage: Math.round(similarity * 100)
+      };
+    } catch (error) {
+      throw this._handleServiceError(error, 'Failed to calculate property similarity');
     }
   }
 
@@ -448,6 +579,33 @@ class PropertyService {
     // Add context to error message
     error.message = `${message}: ${error.message}`;
     return error;
+  }
+
+  /**
+   * Generate embedding for property asynchronously (fire and forget)
+   * @param {string} propertyId - Property ID
+   * @private
+   */
+  _generateEmbeddingAsync(propertyId) {
+    // Don't await - run in background
+    this.embeddingService.generatePropertyEmbedding(propertyId)
+      .catch(error => {
+        console.warn(`Failed to generate embedding for property ${propertyId}:`, error.message);
+      });
+  }
+
+  /**
+   * Update embedding for property asynchronously (fire and forget)
+   * @param {string} propertyId - Property ID
+   * @param {Object} updatedFields - Updated fields
+   * @private
+   */
+  _updateEmbeddingAsync(propertyId, updatedFields) {
+    // Don't await - run in background
+    this.embeddingService.updatePropertyEmbedding(propertyId, updatedFields)
+      .catch(error => {
+        
+      });
   }
 }
 

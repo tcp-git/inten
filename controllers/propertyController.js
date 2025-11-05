@@ -1,4 +1,11 @@
 const PropertyService = require('../services/propertyService');
+const { 
+  asyncHandler, 
+  NotFoundError, 
+  ValidationError,
+  DatabaseError 
+} = require('../middleware/errors');
+const logger = require('../middleware/logger');
 
 /**
  * Property Controller - Handles HTTP requests and responses for Property operations
@@ -13,233 +20,240 @@ class PropertyController {
    * Create a new property
    * POST /api/properties
    */
-  async createProperty(req, res) {
-    try {
-      const propertyData = req.body;
-      const property = await this.propertyService.createProperty(propertyData);
+  createProperty = asyncHandler(async (req, res) => {
+    const propertyData = req.body;
+    const property = await this.propertyService.createProperty(propertyData);
 
-      res.status(201).json({
-        success: true,
-        message: 'Property created successfully',
-        data: property
-      });
-    } catch (error) {
-      this._handleError(res, error, 'Failed to create property');
-    }
-  }
+    logger.info('Property created successfully', {
+      requestId: req.requestId,
+      propertyId: property._id,
+      title: property.title,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Property created successfully',
+      data: property
+    });
+  });
 
   /**
    * Get property by ID
    * GET /api/properties/:id
    */
-  async getProperty(req, res) {
-    try {
-      const { id } = req.params;
-      const property = await this.propertyService.getPropertyById(id);
+  getProperty = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const property = await this.propertyService.getPropertyById(id);
 
-      res.status(200).json({
-        success: true,
-        data: property
-      });
-    } catch (error) {
-      this._handleError(res, error, 'Failed to get property');
+    if (!property) {
+      throw new NotFoundError('Property');
     }
-  }
+
+    res.status(200).json({
+      success: true,
+      data: property
+    });
+  });
 
   /**
    * Get all properties with filtering and pagination
    * GET /api/properties
    */
-  async getAllProperties(req, res) {
-    try {
-      const queryOptions = req.query;
-      const result = await this.propertyService.getAllProperties(queryOptions);
+  getAllProperties = asyncHandler(async (req, res) => {
+    const queryOptions = req.query;
+    const result = await this.propertyService.getAllProperties(queryOptions);
 
-      res.status(200).json({
-        success: true,
-        data: result.properties,
-        pagination: result.pagination
-      });
-    } catch (error) {
-      this._handleError(res, error, 'Failed to get properties');
-    }
-  }
+    res.status(200).json({
+      success: true,
+      data: result.properties,
+      pagination: result.pagination
+    });
+  });
 
   /**
    * Update property by ID
    * PUT /api/properties/:id
    */
-  async updateProperty(req, res) {
-    try {
-      const { id } = req.params;
-      const updateData = req.body;
-      
-      const property = await this.propertyService.updateProperty(id, updateData);
+  updateProperty = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const property = await this.propertyService.updateProperty(id, updateData);
 
-      res.status(200).json({
-        success: true,
-        message: 'Property updated successfully',
-        data: property
-      });
-    } catch (error) {
-      this._handleError(res, error, 'Failed to update property');
+    if (!property) {
+      throw new NotFoundError('Property');
     }
-  }
+
+    logger.info('Property updated successfully', {
+      requestId: req.requestId,
+      propertyId: id,
+      updatedFields: Object.keys(updateData),
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Property updated successfully',
+      data: property
+    });
+  });
 
   /**
    * Delete property by ID
    * DELETE /api/properties/:id
    */
-  async deleteProperty(req, res) {
-    try {
-      const { id } = req.params;
-      const result = await this.propertyService.deleteProperty(id);
+  deleteProperty = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const result = await this.propertyService.deleteProperty(id);
 
-      res.status(200).json({
-        success: true,
-        message: result.message,
-        data: result.deletedProperty
-      });
-    } catch (error) {
-      this._handleError(res, error, 'Failed to delete property');
+    if (!result.deletedProperty) {
+      throw new NotFoundError('Property');
     }
-  }
+
+    logger.info('Property deleted successfully', {
+      requestId: req.requestId,
+      propertyId: id,
+      title: result.deletedProperty.title,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: result.deletedProperty
+    });
+  });
 
   /**
    * Search properties with text, location, and filters
    * POST /api/properties/search
    */
-  async searchProperties(req, res) {
-    try {
-      const searchParams = req.body;
-      const result = await this.propertyService.searchProperties(searchParams);
+  searchProperties = asyncHandler(async (req, res) => {
+    const searchParams = {
+      ...req.body,
+      // Allow query parameter to override body parameter
+      useSemanticSearch: req.query.useSemanticSearch !== undefined 
+        ? req.query.useSemanticSearch === 'true'
+        : req.body.useSemanticSearch
+    };
+    
+    const result = await this.propertyService.searchProperties(searchParams);
 
-      res.status(200).json({
-        success: true,
-        data: result.properties,
-        pagination: result.pagination,
-        searchMeta: result.searchMeta
-      });
-    } catch (error) {
-      this._handleError(res, error, 'Property search failed');
-    }
-  }
+    logger.info('Property search completed', {
+      requestId: req.requestId,
+      query: searchParams.query,
+      resultsCount: result.properties.length,
+      useSemanticSearch: searchParams.useSemanticSearch,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result.properties,
+      pagination: result.pagination,
+      searchMeta: result.searchMeta
+    });
+  });
 
   /**
    * Get property statistics
    * GET /api/properties/stats
    */
-  async getPropertyStats(req, res) {
-    try {
-      const stats = await this.propertyService.getPropertyStats();
+  getPropertyStats = asyncHandler(async (req, res) => {
+    const stats = await this.propertyService.getPropertyStats();
 
-      res.status(200).json({
-        success: true,
-        data: stats
-      });
-    } catch (error) {
-      this._handleError(res, error, 'Failed to get property statistics');
-    }
-  }
+    res.status(200).json({
+      success: true,
+      data: stats
+    });
+  });
 
   /**
-   * Handle errors and send appropriate HTTP responses
-   * @param {Object} res - Express response object
-   * @param {Error} error - Error object
-   * @param {string} defaultMessage - Default error message
-   * @private
+   * Find properties similar to a given property
+   * GET /api/properties/:id/similar
    */
-  _handleError(res, error, defaultMessage) {
-    // Log error for debugging
-    console.error(`${defaultMessage}:`, error);
-
-    let statusCode = 500;
-    let errorCode = 'INTERNAL_SERVER_ERROR';
-    let message = defaultMessage;
-
-    // Handle specific error types
-    switch (error.code) {
-      case 'PROPERTY_NOT_FOUND':
-        statusCode = 404;
-        errorCode = 'PROPERTY_NOT_FOUND';
-        message = 'Property not found';
-        break;
-
-      case 'VALIDATION_ERROR':
-        statusCode = 400;
-        errorCode = 'VALIDATION_ERROR';
-        message = 'Invalid input data';
-        break;
-
-      case 'MISSING_REQUIRED_FIELDS':
-        statusCode = 400;
-        errorCode = 'MISSING_REQUIRED_FIELDS';
-        message = error.message;
-        break;
-
-      case 'INVALID_LOCATION':
-        statusCode = 400;
-        errorCode = 'INVALID_LOCATION';
-        message = error.message;
-        break;
-
-      case 'INVALID_ID':
-        statusCode = 400;
-        errorCode = 'INVALID_ID';
-        message = 'Invalid property ID format';
-        break;
-
-      case 'DUPLICATE_ENTRY':
-        statusCode = 409;
-        errorCode = 'DUPLICATE_ENTRY';
-        message = 'Property already exists';
-        break;
-
-      case 'SEARCH_VALIDATION_ERROR':
-      case 'INVALID_LOCATION_COORDINATES':
-      case 'INVALID_COORDINATES_RANGE':
-      case 'INVALID_SEARCH_RADIUS':
-      case 'INVALID_MIN_PRICE':
-      case 'INVALID_MAX_PRICE':
-      case 'INVALID_PRICE_RANGE':
-      case 'INVALID_PAGE_NUMBER':
-      case 'INVALID_PAGE_LIMIT':
-        statusCode = 400;
-        errorCode = error.code;
-        message = error.message;
-        break;
-
-      case 'TEXT_INDEX_ERROR':
-      case 'GEO_INDEX_ERROR':
-        statusCode = 503;
-        errorCode = error.code;
-        message = error.message;
-        break;
-
-      default:
-        // For unknown errors, use default values
-        message = process.env.NODE_ENV === 'development' 
-          ? error.message 
-          : 'An unexpected error occurred';
-        break;
-    }
-
-    const errorResponse = {
-      success: false,
-      error: {
-        code: errorCode,
-        message: message,
-        timestamp: new Date().toISOString()
-      }
+  getSimilarProperties = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { 
+      limit = 10, 
+      threshold = 0.7, 
+      useSemanticSearch = 'true',
+      includeScores = 'false'
+    } = req.query;
+    
+    const options = {
+      limit: parseInt(limit),
+      threshold: parseFloat(threshold),
+      useSemanticSearch: useSemanticSearch === 'true',
+      includeScores: includeScores === 'true'
     };
 
-    // Add error details in development mode or for validation errors
-    if (process.env.NODE_ENV === 'development' || error.details) {
-      errorResponse.error.details = error.details || error.stack;
+    const result = await this.propertyService.findSimilarProperties(id, options);
+
+    if (!result.targetProperty) {
+      throw new NotFoundError('Property');
     }
 
-    res.status(statusCode).json(errorResponse);
-  }
+    res.status(200).json({
+      success: true,
+      data: result.similarProperties,
+      targetProperty: result.targetProperty,
+      searchMeta: result.searchMeta
+    });
+  });
+
+  /**
+   * Generate embeddings for properties that don't have them
+   * POST /api/properties/generate-embeddings
+   */
+  generateEmbeddings = asyncHandler(async (req, res) => {
+    const { batchSize = 10, continueOnError = true } = req.body;
+    
+    const options = {
+      batchSize: parseInt(batchSize),
+      continueOnError: continueOnError === true
+    };
+
+    const result = await this.propertyService.generateMissingEmbeddings(options);
+
+    logger.info('Embedding generation completed', {
+      requestId: req.requestId,
+      totalProcessed: result.totalProcessed,
+      successful: result.successful?.length || 0,
+      failed: result.failed?.length || 0,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: {
+        totalProcessed: result.totalProcessed,
+        successful: result.successful?.length || 0,
+        failed: result.failed?.length || 0,
+        successRate: result.successful && result.totalProcessed 
+          ? `${Math.round((result.successful.length / result.totalProcessed) * 100)}%`
+          : '0%'
+      },
+      details: {
+        successful: result.successful || [],
+        failed: result.failed || []
+      }
+    });
+  });
+
+  /**
+   * Calculate semantic similarity between two properties
+   * GET /api/properties/:id1/similarity/:id2
+   */
+  calculateSimilarity = asyncHandler(async (req, res) => {
+    const { id1, id2 } = req.params;
+    
+    const result = await this.propertyService.calculatePropertySimilarity(id1, id2);
+
+    res.status(200).json({
+      success: true,
+      data: result
+    });
+  });
+
+
 }
 
 module.exports = PropertyController;

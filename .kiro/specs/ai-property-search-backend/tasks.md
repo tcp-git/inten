@@ -61,7 +61,7 @@
   - Create basic FastAPI application with health endpoint
   - _Requirements: 1.1, 1.4_
 
-- [-] 7. Implement intent detection and embedding generation
+- [x] 7. Implement intent detection and embedding generation
   - Create intent detection service using Sentence-BERT
   - Implement natural language query processing
   - Build keyword extraction from user queries
@@ -69,7 +69,7 @@
   - Implement query parameter extraction (price, location, type)
   - _Requirements: 1.1, 1.2, 1.4_
 
-- [ ] 8. Create AI engine API endpoints
+- [x] 8. Create AI engine API endpoints
   - Build /intent endpoint for natural language processing
   - Create /embedding endpoint for text embedding generation
   - Implement /similarity endpoint for similarity calculations
@@ -77,13 +77,13 @@
   - Implement error handling and validation
   - _Requirements: 1.1, 1.2, 1.4_
 
-- [ ] 8.1 Write unit tests for AI engine
+- [x] 8.1 Write unit tests for AI engine
   - Test intent detection with sample queries
   - Test embedding generation consistency
   - Test similarity calculation accuracy
   - _Requirements: 1.1, 1.2_
 
-- [ ] 9. Integrate Node.js backend with AI engine
+- [x] 9. Integrate Node.js backend with AI engine
   - Create AI search service in Node.js for FastAPI communication
   - Implement HTTP client for AI engine requests
   - Add error handling and timeout management for AI service calls
@@ -91,7 +91,7 @@
   - Update search service to use AI-processed queries
   - _Requirements: 1.5, 5.3_
 
-- [ ] 10. Implement semantic search and ranking
+- [x] 10. Implement semantic search and ranking
   - Add embedding field to Property schema
   - Create service to generate and store property embeddings
   - Implement cosine similarity calculation for semantic matching
@@ -99,20 +99,20 @@
   - Update search endpoint to return relevance scores
   - _Requirements: 3.1, 3.2, 3.4_
 
-- [ ] 11. Add similar properties functionality
+- [x] 11. Add similar properties functionality
   - Create endpoint to find properties similar to a given property
   - Implement similarity search using stored embeddings
   - Add ranking based on multiple similarity factors
   - Create service method for similarity calculations
   - _Requirements: 3.1, 3.2_
 
-- [ ] 11.1 Write integration tests for semantic search
+- [x] 11.1 Write integration tests for semantic search
   - Test semantic similarity with various property descriptions
   - Test ranking algorithm with different query types
   - Test similar properties endpoint functionality
   - _Requirements: 3.1, 3.2_
 
-- [ ] 12. Implement comprehensive error handling
+- [x] 12. Implement comprehensive error handling
   - Create centralized error handling middleware
   - Implement structured error response format
   - Add specific error codes for different failure scenarios
@@ -120,7 +120,7 @@
   - Implement request ID tracking for debugging
   - _Requirements: 5.3, 6.4_
 
-- [ ] 13. Add API documentation with Swagger
+- [-] 13. Add API documentation with Swagger
   - Install and configure Swagger/OpenAPI 3.0
   - Document all API endpoints with request/response schemas
   - Add example requests and responses

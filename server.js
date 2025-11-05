@@ -3,9 +3,29 @@ const cors = require('cors');
 require('dotenv').config();
 
 const database = require('./config/database');
+const { specs, swaggerUi } = require('./config/swagger');
+
+// Import middleware
+const logger = require('./middleware/logger');
+const requestIdMiddleware = require('./middleware/requestId');
+const requestLoggerMiddleware = require('./middleware/requestLogger');
+const { errorHandler, notFoundHandler } = require('./middleware/errors');
+const { apiRateLimiter } = require('./middleware/rateLimiter');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Trust proxy for accurate IP addresses (important for rate limiting)
+app.set('trust proxy', 1);
+
+// Request ID middleware (must be first)
+app.use(requestIdMiddleware);
+
+// Request logging middleware
+app.use(requestLoggerMiddleware);
+
+// Rate limiting middleware
+app.use('/api', apiRateLimiter);
 
 // Basic middleware
 app.use(
@@ -15,95 +35,114 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    try {
+      JSON.parse(buf);
+    } catch (e) {
+      const error = new Error('Invalid JSON payload');
+      error.statusCode = 400;
+      error.code = 'INVALID_JSON';
+      throw error;
+    }
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
-
-const healthService = require('./services/healthService');
 
 // Import routes
 const propertyRoutes = require('./routes/propertyRoutes');
+const healthRoutes = require('./routes/healthRoutes');
+
+// API Documentation
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(specs, {
+  explorer: true,
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'AI Property Search API Documentation',
+  swaggerOptions: {
+    docExpansion: 'none',
+    filter: true,
+    showRequestDuration: true,
+    tryItOutEnabled: true,
+    requestInterceptor: (req) => {
+      req.headers['X-Requested-With'] = 'SwaggerUI';
+      return req;
+    }
+  }
+}));
 
 // API routes
 app.use('/api/properties', propertyRoutes);
 
-// Health check endpoints
-app.get('/health', async (req, res) => {
-  try {
-    const healthStatus = await healthService.getHealthStatus();
-    const statusCode = healthStatus.database.healthy ? 200 : 503;
-    
-    res.status(statusCode).json({
-      success: healthStatus.database.healthy,
-      message: 'AI Property Search Backend Health Check',
-      ...healthStatus,
-    });
-  } catch (error) {
-    res.status(503).json({
-      success: false,
-      message: 'Health check failed',
-      error: error.message,
-      timestamp: new Date().toISOString(),
-    });
-  }
-});
+// Health check routes
+app.use('/health', healthRoutes);
 
-// Detailed health check endpoint
-app.get('/health/detailed', async (req, res) => {
-  try {
-    const detailedHealth = await healthService.getDetailedHealthCheck();
-    const statusCode = detailedHealth.overall === 'healthy' ? 200 : 503;
-    
-    res.status(statusCode).json({
-      success: detailedHealth.overall === 'healthy',
-      message: 'Detailed Health Check',
-      ...detailedHealth,
-    });
-  } catch (error) {
-    res.status(503).json({
-      success: false,
-      message: 'Detailed health check failed',
-      error: error.message,
-      timestamp: new Date().toISOString(),
-    });
-  }
-});
+/**
+ * @swagger
+ * tags:
+ *   name: General
+ *   description: General API information and utilities
+ */
 
-// Basic route
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     summary: API welcome message
+ *     description: Welcome endpoint providing basic API information and links to documentation.
+ *     tags: [General]
+ *     responses:
+ *       200:
+ *         description: Welcome message with API information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Welcome to AI Property Search Backend API"
+ *                 version:
+ *                   type: string
+ *                   example: "1.0.0"
+ *                 documentation:
+ *                   type: string
+ *                   example: "/api/docs"
+ *                 endpoints:
+ *                   type: object
+ *                   properties:
+ *                     properties:
+ *                       type: string
+ *                       example: "/api/properties"
+ *                     search:
+ *                       type: string
+ *                       example: "/api/properties/search"
+ *                     health:
+ *                       type: string
+ *                       example: "/health"
+ */
 app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Welcome to AI Property Search Backend API',
     version: '1.0.0',
     documentation: '/api/docs',
+    endpoints: {
+      properties: '/api/properties',
+      search: '/api/properties/search',
+      health: '/health'
+    }
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: {
-      code: 'NOT_FOUND',
-      message: 'Endpoint not found',
-      path: req.originalUrl,
-    },
-  });
-});
+// 404 handler for undefined routes
+app.use('*', notFoundHandler);
 
-// Global error handler
-app.use((err, req, res, _next) => {
-  // eslint-disable-next-line no-console
-  console.error('Error:', err);
-
-  res.status(err.status || 500).json({
-    success: false,
-    error: {
-      code: err.code || 'INTERNAL_SERVER_ERROR',
-      message: err.message || 'Something went wrong',
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-    },
-  });
-});
+// Global error handler (must be last)
+app.use(errorHandler);
 
 // Initialize database and start server
 async function startServer() {
@@ -123,30 +162,28 @@ async function startServer() {
     
     // Start the server regardless of database connection status
     const server = app.listen(PORT, () => {
-      // eslint-disable-next-line no-console
-      console.log(`🚀 Server running on port ${PORT}`);
-      // eslint-disable-next-line no-console
-      console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-      // eslint-disable-next-line no-console
-      console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-      // eslint-disable-next-line no-console
-      console.log(`🔗 Detailed health: http://localhost:${PORT}/health/detailed`);
+      logger.info('Server started successfully', {
+        port: PORT,
+        environment: process.env.NODE_ENV || 'development',
+        healthCheck: `http://localhost:${PORT}/health`,
+        detailedHealth: `http://localhost:${PORT}/health/detailed`,
+      });
     });
 
     // Graceful shutdown handling
     const gracefulShutdown = async (signal) => {
-      console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+      logger.info('Graceful shutdown initiated', { signal });
       
       server.close(async () => {
-        console.log('🔌 HTTP server closed');
+        logger.info('HTTP server closed');
         
         try {
           await database.disconnect();
-          console.log('✅ Graceful shutdown completed');
+          logger.info('Graceful shutdown completed successfully');
           // eslint-disable-next-line no-process-exit
           process.exit(0);
         } catch (shutdownError) {
-          console.error('❌ Error during shutdown:', shutdownError.message);
+          logger.error('Error during shutdown', { error: shutdownError.message });
           // eslint-disable-next-line no-process-exit
           process.exit(1);
         }
@@ -154,7 +191,7 @@ async function startServer() {
 
       // Force close server after 30 seconds
       setTimeout(() => {
-        console.error('💥 Could not close connections in time, forcefully shutting down');
+        logger.error('Forced shutdown due to timeout');
         // eslint-disable-next-line no-process-exit
         process.exit(1);
       }, 30000);
@@ -166,7 +203,7 @@ async function startServer() {
 
     return server;
   } catch (startupError) {
-    console.error('💥 Failed to start server:', startupError.message);
+    logger.error('Failed to start server', { error: startupError.message, stack: startupError.stack });
     // eslint-disable-next-line no-process-exit
     process.exit(1);
   }

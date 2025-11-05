@@ -1,12 +1,15 @@
 const SearchService = require('../../services/searchService');
 const PropertyRepository = require('../../repositories/propertyRepository');
+const AISearchService = require('../../services/aiSearchService');
 
-// Mock the PropertyRepository
+// Mock the dependencies
 jest.mock('../../repositories/propertyRepository');
+jest.mock('../../services/aiSearchService');
 
 describe('SearchService', () => {
   let searchService;
   let mockPropertyRepository;
+  let mockAISearchService;
 
   const sampleProperties = [
     {
@@ -75,6 +78,7 @@ describe('SearchService', () => {
     jest.clearAllMocks();
     searchService = new SearchService();
     mockPropertyRepository = PropertyRepository.prototype;
+    mockAISearchService = AISearchService.prototype;
   });
 
   describe('searchProperties', () => {
@@ -600,6 +604,179 @@ describe('SearchService', () => {
       });
     });
 
+    describe('AI integration', () => {
+      it('should process natural language queries with AI', async () => {
+        const aiIntentResult = {
+          keywords: ['modern', 'condo', 'swimming', 'pool'],
+          extractedFilters: {
+            property_type: 'condo',
+            price_max: 4000000
+          },
+          embedding: [0.1, 0.2, 0.3, 0.4, 0.5],
+          confidenceScore: 0.85,
+          processingTime: 1.2,
+          intentSummary: 'Looking for modern condo with swimming pool',
+          aiProcessed: true
+        };
+
+        const aiSearchParams = {
+          query: 'modern condo swimming pool',
+          filters: { propertyType: 'condo', maxPrice: 4000000 },
+          embedding: [0.1, 0.2, 0.3, 0.4, 0.5],
+          aiMeta: {
+            processed: true,
+            confidence: 0.85,
+            intentSummary: 'Looking for modern condo with swimming pool',
+            processingTime: 1.2
+          }
+        };
+
+        mockAISearchService.processIntent.mockResolvedValue(aiIntentResult);
+        mockAISearchService.extractSearchParameters.mockReturnValue(aiSearchParams);
+
+        const searchResults = [{ ...sampleProperties[0], relevanceScore: 0.9 }];
+        mockPropertyRepository.aggregate
+          .mockResolvedValueOnce(searchResults)
+          .mockResolvedValueOnce([{ total: 1 }]);
+
+        const searchParams = {
+          query: 'I want a modern condo with swimming pool under 4 million baht',
+          useAI: true
+        };
+
+        const result = await searchService.searchProperties(searchParams);
+
+        expect(mockAISearchService.processIntent).toHaveBeenCalledWith(searchParams.query);
+        expect(mockAISearchService.extractSearchParameters).toHaveBeenCalledWith(aiIntentResult);
+        expect(result.searchMeta.aiProcessing.processed).toBe(true);
+        expect(result.searchMeta.aiProcessing.confidence).toBe(0.85);
+      });
+
+      it('should fallback to regular search when AI fails', async () => {
+        mockAISearchService.processIntent.mockRejectedValue(new Error('AI service unavailable'));
+
+        const searchResults = [{ ...sampleProperties[0], relevanceScore: 0.7 }];
+        mockPropertyRepository.aggregate
+          .mockResolvedValueOnce(searchResults)
+          .mockResolvedValueOnce([{ total: 1 }]);
+
+        const searchParams = {
+          query: 'I want a modern condo with swimming pool',
+          useAI: true
+        };
+
+        const result = await searchService.searchProperties(searchParams);
+
+        expect(result.searchMeta.aiProcessing.fallbackUsed).toBe(true);
+        expect(result.searchMeta.aiProcessing.error).toBe('AI service unavailable');
+        expect(result.properties).toHaveLength(1);
+      });
+
+      it('should skip AI processing for non-natural language queries', async () => {
+        const searchResults = [{ ...sampleProperties[0], relevanceScore: 0.8 }];
+        mockPropertyRepository.aggregate
+          .mockResolvedValueOnce(searchResults)
+          .mockResolvedValueOnce([{ total: 1 }]);
+
+        const searchParams = {
+          query: 'condo pool', // Short, keyword-like query
+          useAI: true
+        };
+
+        const result = await searchService.searchProperties(searchParams);
+
+        expect(mockAISearchService.processIntent).not.toHaveBeenCalled();
+        expect(result.searchMeta.aiProcessing.processed).toBe(false);
+      });
+
+      it('should disable AI processing when useAI is false', async () => {
+        const searchResults = [{ ...sampleProperties[0], relevanceScore: 0.8 }];
+        mockPropertyRepository.aggregate
+          .mockResolvedValueOnce(searchResults)
+          .mockResolvedValueOnce([{ total: 1 }]);
+
+        const searchParams = {
+          query: 'I want a modern condo with swimming pool under 4 million baht',
+          useAI: false
+        };
+
+        const result = await searchService.searchProperties(searchParams);
+
+        expect(mockAISearchService.processIntent).not.toHaveBeenCalled();
+        expect(result.searchMeta.aiProcessing.processed).toBe(false);
+      });
+    });
+
+    describe('semantic similarity search', () => {
+      it('should find similar properties using embeddings', async () => {
+        const targetProperty = sampleProperties[0];
+        const targetEmbedding = [0.1, 0.2, 0.3, 0.4, 0.5];
+        
+        mockPropertyRepository.findById.mockResolvedValue({
+          ...targetProperty,
+          embedding: targetEmbedding
+        });
+
+        const similarProperties = [
+          { ...sampleProperties[1], semanticSimilarity: 0.85 },
+          { ...sampleProperties[2], semanticSimilarity: 0.75 }
+        ];
+
+        mockPropertyRepository.aggregate.mockResolvedValue(similarProperties);
+
+        const result = await searchService.findSimilarProperties(targetProperty._id, {
+          limit: 10,
+          threshold: 0.7
+        });
+
+        expect(mockPropertyRepository.findById).toHaveBeenCalledWith(targetProperty._id);
+        expect(result.similarProperties).toHaveLength(2);
+        expect(result.searchMeta.method).toBe('semantic');
+        expect(result.searchMeta.threshold).toBe(0.7);
+      });
+
+      it('should generate embedding if property does not have one', async () => {
+        const targetProperty = { ...sampleProperties[0], embedding: [] };
+        const generatedEmbedding = [0.1, 0.2, 0.3, 0.4, 0.5];
+        
+        mockPropertyRepository.findById.mockResolvedValue(targetProperty);
+        mockAISearchService.generateEmbedding.mockResolvedValue(generatedEmbedding);
+
+        const similarProperties = [
+          { ...sampleProperties[1], semanticSimilarity: 0.85 }
+        ];
+
+        mockPropertyRepository.aggregate.mockResolvedValue(similarProperties);
+
+        const result = await searchService.findSimilarProperties(targetProperty._id);
+
+        expect(mockAISearchService.generateEmbedding).toHaveBeenCalledWith(
+          `${targetProperty.title} ${targetProperty.description}`
+        );
+        expect(result.similarProperties).toHaveLength(1);
+      });
+
+      it('should fallback to attribute-based similarity when embeddings fail', async () => {
+        const targetProperty = { ...sampleProperties[0], embedding: [] };
+        
+        mockPropertyRepository.findById.mockResolvedValue(targetProperty);
+        mockAISearchService.generateEmbedding.mockResolvedValue([]);
+
+        const similarProperties = {
+          properties: [sampleProperties[1]],
+          total: 1
+        };
+
+        mockPropertyRepository.findAll.mockResolvedValue(similarProperties);
+
+        const result = await searchService.findSimilarProperties(targetProperty._id);
+
+        expect(result.searchMeta.method).toBe('attribute-based');
+        expect(result.searchMeta.fallbackUsed).toBe(true);
+        expect(result.similarProperties).toHaveLength(1);
+      });
+    });
+
     describe('result formatting', () => {
       it('should format search results correctly', async () => {
         const searchResults = [{
@@ -660,7 +837,13 @@ describe('SearchService', () => {
             propertyType: 'condo',
             priceRange: { min: 3000000, max: undefined }
           },
-          sortBy: 'relevance'
+          sortBy: 'relevance',
+          aiProcessing: {
+            processed: false,
+            confidence: 0,
+            processingTime: 0,
+            fallbackUsed: false
+          }
         });
       });
     });

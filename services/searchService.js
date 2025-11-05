@@ -1,28 +1,83 @@
 const PropertyRepository = require('../repositories/propertyRepository');
+const AISearchService = require('./aiSearchService');
+const EmbeddingService = require('./embeddingService');
 
 /**
  * Search Service - Handles property search functionality
  * Provides text search, geospatial search, and filtering capabilities
+ * Integrates with AI engine for natural language processing and semantic search
  */
 class SearchService {
   constructor() {
     this.propertyRepository = new PropertyRepository();
+    this.aiSearchService = new AISearchService();
+    this.embeddingService = new EmbeddingService();
   }
 
   /**
    * Perform comprehensive property search with text, location, and filters
+   * Uses AI processing for natural language queries when available
    * @param {Object} searchParams - Search parameters
    * @returns {Promise<Object>} Search results with pagination
    */
   async searchProperties(searchParams = {}) {
     try {
-      const {
+      let {
         query: searchText,
         location,
         filters = {},
         pagination = {},
-        sortBy = 'relevance'
+        sortBy = 'relevance',
+        useAI = true
       } = searchParams;
+
+      let aiMeta = {
+        processed: false,
+        confidence: 0,
+        processingTime: 0,
+        fallbackUsed: false
+      };
+
+      // Process query with AI if enabled and query is natural language
+      if (useAI && searchText && this._isNaturalLanguageQuery(searchText)) {
+        try {
+          const intentResult = await this.aiSearchService.processIntent(searchText);
+          
+          if (intentResult.aiProcessed) {
+            // Extract AI-processed parameters
+            const aiParams = this.aiSearchService.extractSearchParameters(intentResult);
+            
+            // Merge AI-extracted filters with existing filters
+            filters = { ...filters, ...aiParams.filters };
+            
+            // Use AI-extracted location if not provided
+            if (!location && aiParams.location) {
+              location = aiParams.location;
+            }
+            
+            // Use AI-processed keywords as search text
+            if (aiParams.query) {
+              searchText = aiParams.query;
+            }
+            
+            // Store AI metadata
+            aiMeta = aiParams.aiMeta;
+            
+            // Store embedding for semantic search
+            if (aiParams.embedding && aiParams.embedding.length > 0) {
+              searchParams.embedding = aiParams.embedding;
+            }
+          } else {
+            // AI processing failed, use fallback
+            aiMeta.fallbackUsed = true;
+            aiMeta.fallbackReason = intentResult.fallbackReason;
+          }
+        } catch (aiError) {
+          // AI service failed, continue with original query
+          aiMeta.fallbackUsed = true;
+          aiMeta.error = aiError.message;
+        }
+      }
 
       // Build MongoDB aggregation pipeline
       const pipeline = [];
@@ -106,10 +161,10 @@ class SearchService {
         }
       }
 
-      // Stage 4: Calculate relevance score
+      // Stage 4: Calculate relevance score (including semantic similarity if available)
       pipeline.push({
         $addFields: {
-          relevanceScore: this._buildRelevanceScore(searchText, location)
+          relevanceScore: this._buildRelevanceScore(searchText, location, searchParams.embedding)
         }
       });
 
@@ -153,7 +208,8 @@ class SearchService {
           hasTextSearch: !!searchText,
           hasLocationSearch: !!(location && location.coordinates),
           appliedFilters: this._getAppliedFilters(filters),
-          sortBy
+          sortBy,
+          aiProcessing: aiMeta
         }
       };
 
@@ -259,10 +315,11 @@ class SearchService {
    * Build relevance score calculation
    * @param {string} searchText - Search query text
    * @param {Object} location - Location parameters
+   * @param {Array} queryEmbedding - Query embedding for semantic similarity
    * @returns {Object} MongoDB expression for relevance score
    * @private
    */
-  _buildRelevanceScore(searchText, location) {
+  _buildRelevanceScore(searchText, location, queryEmbedding) {
     const scoreComponents = [];
 
     // Text relevance score (0-1)
@@ -270,7 +327,72 @@ class SearchService {
       scoreComponents.push({
         $multiply: [
           { $ifNull: ['$textScore', 0] },
-          0.4 // 40% weight for text relevance
+          queryEmbedding ? 0.2 : 0.4 // Reduce weight if we have semantic similarity
+        ]
+      });
+    }
+
+    // Semantic similarity score (0-1) - if embedding is available
+    if (queryEmbedding && queryEmbedding.length > 0) {
+      scoreComponents.push({
+        $multiply: [
+          {
+            $cond: {
+              if: { $and: [{ $isArray: '$embedding' }, { $gt: [{ $size: '$embedding' }, 0] }] },
+              then: {
+                // Calculate cosine similarity using MongoDB aggregation
+                $let: {
+                  vars: {
+                    dotProduct: {
+                      $sum: {
+                        $map: {
+                          input: { $range: [0, { $size: '$embedding' }] },
+                          as: 'i',
+                          in: {
+                            $multiply: [
+                              { $arrayElemAt: ['$embedding', '$$i'] },
+                              { $arrayElemAt: [queryEmbedding, '$$i'] }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    normA: {
+                      $sqrt: {
+                        $sum: {
+                          $map: {
+                            input: '$embedding',
+                            as: 'val',
+                            in: { $multiply: ['$$val', '$$val'] }
+                          }
+                        }
+                      }
+                    },
+                    normB: {
+                      $sqrt: {
+                        $sum: {
+                          $map: {
+                            input: queryEmbedding,
+                            as: 'val',
+                            in: { $multiply: ['$$val', '$$val'] }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  in: {
+                    $cond: {
+                      if: { $and: [{ $gt: ['$$normA', 0] }, { $gt: ['$$normB', 0] }] },
+                      then: { $divide: ['$$dotProduct', { $multiply: ['$$normA', '$$normB'] }] },
+                      else: 0
+                    }
+                  }
+                }
+              },
+              else: 0
+            }
+          },
+          0.4 // 40% weight for semantic similarity
         ]
       });
     }
@@ -467,6 +589,214 @@ class SearchService {
     if (filters.status) applied.status = filters.status;
 
     return applied;
+  }
+
+  /**
+   * Perform semantic search for similar properties
+   * @param {string} propertyId - Property ID to find similar properties for
+   * @param {Object} options - Search options
+   * @returns {Promise<Object>} Similar properties
+   */
+  async findSimilarProperties(propertyId, options = {}) {
+    try {
+      const { limit = 10, threshold = 0.7 } = options;
+
+      // Get the target property
+      const targetProperty = await this.propertyRepository.findById(propertyId);
+      if (!targetProperty) {
+        throw new Error('Property not found');
+      }
+
+      // Generate embedding for target property if not exists
+      let targetEmbedding = targetProperty.embedding;
+      if (!targetEmbedding || targetEmbedding.length === 0) {
+        const description = `${targetProperty.title} ${targetProperty.description}`;
+        targetEmbedding = await this.aiSearchService.generateEmbedding(description);
+      }
+
+      if (!targetEmbedding || targetEmbedding.length === 0) {
+        // Fallback to feature-based similarity
+        return this._findSimilarPropertiesFallback(targetProperty, options);
+      }
+
+      // Build aggregation pipeline for semantic similarity
+      const pipeline = [
+        {
+          $match: {
+            _id: { $ne: targetProperty._id },
+            status: 'available',
+            embedding: { $exists: true, $ne: [] }
+          }
+        },
+        {
+          $addFields: {
+            semanticSimilarity: {
+              // Calculate cosine similarity (same as in relevance score)
+              $let: {
+                vars: {
+                  dotProduct: {
+                    $sum: {
+                      $map: {
+                        input: { $range: [0, { $size: '$embedding' }] },
+                        as: 'i',
+                        in: {
+                          $multiply: [
+                            { $arrayElemAt: ['$embedding', '$$i'] },
+                            { $arrayElemAt: [targetEmbedding, '$$i'] }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  normA: {
+                    $sqrt: {
+                      $sum: {
+                        $map: {
+                          input: '$embedding',
+                          as: 'val',
+                          in: { $multiply: ['$$val', '$$val'] }
+                        }
+                      }
+                    }
+                  },
+                  normB: Math.sqrt(targetEmbedding.reduce((sum, val) => sum + val * val, 0))
+                },
+                in: {
+                  $cond: {
+                    if: { $gt: ['$$normA', 0] },
+                    then: { $divide: ['$$dotProduct', { $multiply: ['$$normA', '$$normB'] }] },
+                    else: 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          $match: {
+            semanticSimilarity: { $gte: threshold }
+          }
+        },
+        {
+          $sort: { semanticSimilarity: -1 }
+        },
+        {
+          $limit: limit
+        }
+      ];
+
+      const similarProperties = await this.propertyRepository.aggregate(pipeline);
+
+      return {
+        targetProperty: this._formatSearchResult(targetProperty),
+        similarProperties: similarProperties.map(property => 
+          this._formatSearchResult(property)
+        ),
+        searchMeta: {
+          method: 'semantic',
+          threshold,
+          totalFound: similarProperties.length
+        }
+      };
+
+    } catch (error) {
+      throw this._handleSearchError(error, 'Similar properties search failed');
+    }
+  }
+
+  /**
+   * Check if query appears to be natural language vs structured search
+   * @param {string} query - Search query
+   * @returns {boolean} True if appears to be natural language
+   * @private
+   */
+  _isNaturalLanguageQuery(query) {
+    if (!query || typeof query !== 'string') {
+      return false;
+    }
+
+    const trimmed = query.trim();
+    
+    // Consider it natural language if:
+    // - Contains multiple words (3+)
+    // - Contains question words or conversational phrases
+    // - Contains Thai/English sentences
+    // - Doesn't look like structured search terms
+
+    const wordCount = trimmed.split(/\s+/).length;
+    if (wordCount < 3) {
+      return false; // Too short, likely keywords
+    }
+
+    // Check for natural language indicators
+    const naturalLanguageIndicators = [
+      // English
+      /\b(find|search|looking for|want|need|show me|i want|i need)\b/i,
+      /\b(near|close to|around|within|in the area)\b/i,
+      /\b(under|below|above|more than|less than)\b/i,
+      /\b(with|having|that has|includes)\b/i,
+      // Thai
+      /\b(หา|ค้นหา|ต้องการ|อยาก|ขอ|แสดง)\b/i,
+      /\b(ใกล้|แถว|รอบ|ในพื้นที่|ย่าน)\b/i,
+      /\b(ต่ำกว่า|สูงกว่า|ไม่เกิน|มากกว่า|น้อยกว่า)\b/i,
+      /\b(ที่มี|มี|ประกอบด้วย|รวม)\b/i
+    ];
+
+    return naturalLanguageIndicators.some(pattern => pattern.test(trimmed));
+  }
+
+  /**
+   * Fallback method for finding similar properties without AI
+   * @param {Object} targetProperty - Target property
+   * @param {Object} options - Search options
+   * @returns {Promise<Object>} Similar properties
+   * @private
+   */
+  async _findSimilarPropertiesFallback(targetProperty, options = {}) {
+    const { limit = 10 } = options;
+
+    // Build similarity query based on property attributes
+    const similarityFilters = {
+      _id: { $ne: targetProperty._id },
+      status: 'available',
+      propertyType: targetProperty.propertyType
+    };
+
+    // Price range (±30%)
+    const priceRange = targetProperty.price * 0.3;
+    similarityFilters.price = {
+      $gte: targetProperty.price - priceRange,
+      $lte: targetProperty.price + priceRange
+    };
+
+    // Area range (±20%)
+    const areaRange = targetProperty.area * 0.2;
+    similarityFilters.area = {
+      $gte: targetProperty.area - areaRange,
+      $lte: targetProperty.area + areaRange
+    };
+
+    // Same number of bedrooms if available
+    if (targetProperty.rooms && targetProperty.rooms.bedrooms) {
+      similarityFilters['rooms.bedrooms'] = targetProperty.rooms.bedrooms;
+    }
+
+    const similarProperties = await this.propertyRepository.findAll(
+      similarityFilters,
+      { limit, sort: { createdAt: -1 } }
+    );
+
+    return {
+      targetProperty: this._formatSearchResult(targetProperty),
+      similarProperties: similarProperties.properties.map(property => 
+        this._formatSearchResult(property)
+      ),
+      searchMeta: {
+        method: 'attribute-based',
+        totalFound: similarProperties.properties.length,
+        fallbackUsed: true
+      }
+    };
   }
 
   /**

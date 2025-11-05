@@ -1,4 +1,5 @@
 const Joi = require('joi');
+const { ValidationError } = require('./errors');
 
 /**
  * Joi validation schemas for Property API endpoints
@@ -199,14 +200,8 @@ const validate = (schema, source = 'body') => {
         value: detail.context?.value,
       }));
 
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Invalid input data',
-          details: validationErrors,
-        }
-      });
+      const validationError = new ValidationError('Invalid input data', validationErrors);
+      return next(validationError);
     }
 
     // Replace the original data with validated and sanitized data

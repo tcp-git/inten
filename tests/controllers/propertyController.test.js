@@ -329,7 +329,14 @@ describe('Property API Endpoints', () => {
         available: 2,
         sold: 1,
         rented: 1,
-        pending: 0
+        pending: 0,
+        embeddings: expect.objectContaining({
+          totalProperties: expect.any(Number),
+          propertiesWithEmbeddings: expect.any(Number),
+          propertiesWithoutEmbeddings: expect.any(Number),
+          coveragePercentage: expect.any(Number),
+          lastUpdated: expect.any(String)
+        })
       });
     });
   });

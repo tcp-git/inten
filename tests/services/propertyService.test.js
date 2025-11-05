@@ -308,7 +308,14 @@ describe('PropertyService', () => {
         available: 75,
         sold: 15,
         rented: 5,
-        pending: 5 // total - available - sold - rented
+        pending: 5, // total - available - sold - rented
+        embeddings: expect.objectContaining({
+          totalProperties: expect.any(Number),
+          propertiesWithEmbeddings: expect.any(Number),
+          propertiesWithoutEmbeddings: expect.any(Number),
+          coveragePercentage: expect.any(Number),
+          lastUpdated: expect.any(String)
+        })
       });
     });
   });
